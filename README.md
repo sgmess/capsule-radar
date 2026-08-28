@@ -264,11 +264,18 @@ Mouse = touch · `T` = switch theme · close the window to quit.
 
 ### Screenshot regression net
 
-Every push renders all thirteen screens in that simulator on CI and diffs them
+Every push renders the twelve simulator-renderable screens on CI and diffs them
 pixel-for-pixel against the references in `tests/screens/`. Layout bugs are the ones this
 project actually suffers from — text landing on text, rings drifting off their image,
 labels clipped by the round bezel — and until now every one of them was found by flashing
 a board and looking at it.
+
+The boot splash is not among them. On device it is a baked JPEG decoded by TJpg_Decoder,
+and both the image and the decoder are compiled only for the ESP targets, so the
+simulator falls back to the procedural `splash_paint()` and draws something else. A
+reference built from that is a picture of the fallback rather than of the splash, which
+is misleading to anyone reading the directory. `docs/img/splash.png` carries the real
+artwork, taken from the firmware's own JPEG.
 
 ```bash
 python tools/check_screens.py --shots shots            # compare

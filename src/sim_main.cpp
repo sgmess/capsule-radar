@@ -291,21 +291,14 @@ int main(int argc, char **argv) {
         }
         lv_timer_handler();
 
-        // headless screenshot mode: grab the boot splash early (before it fades)
-        static bool splashSaved = false;
-        if (shotPath && !splashSaved && now - start > 900) {
-            splashSaved = true;
-            lv_refr_now(NULL);
-            SDL_RenderClear(s_ren); SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
-            int ow, oh; SDL_GetRendererOutputSize(s_ren, &ow, &oh);
-            SDL_Surface *surf = SDL_CreateRGBSurfaceWithFormat(0, ow, oh, 32, SDL_PIXELFORMAT_ARGB8888);
-            if (surf) {
-                SDL_RenderReadPixels(s_ren, NULL, SDL_PIXELFORMAT_ARGB8888, surf->pixels, surf->pitch);
-                char path[300]; snprintf(path, sizeof(path), "%s-splash.bmp", shotPath);
-                SDL_SaveBMP(surf, path); SDL_FreeSurface(surf);
-                printf("[sim] saved %s\n", path);
-            }
-        }
+        // The boot splash is deliberately NOT captured here any more. On device it is a
+        // baked JPEG of the artwork; the decoder and the image both sit behind
+        // #if defined(ESP_PLATFORM), so the simulator falls back to splash_paint() and
+        // draws something else entirely. The reference that produced was therefore a
+        // picture of the fallback, not of the splash anyone actually sees -- misleading
+        // to read, and it churned on every version bump without once catching a
+        // regression. docs/img/splash.png carries the real artwork, taken straight from
+        // the firmware's own JPEG.
 
         // animated GIF capture (--gif <prefix>): grab frames after the splash fades
         static Uint32 lastGif = 0;
