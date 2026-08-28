@@ -23,11 +23,21 @@
 #define MAP_MAX_TILES   4          // per axis (4x4 = 2 MB mosaic worst case)
 #define MAP_ZOOM_MIN    4
 #define MAP_ZOOM_MAX    13
-#define MAP_UA "SkyGlass/1.0 (+https://github.com/socquique/capsule-radar)"
+// OSM's tile policy asks for a User-Agent that clearly identifies the application and
+// gives a contact; a library default or a spoofed browser string may be blocked without
+// notice. This one names the firmware, its version and where it lives.
+#define MAP_UA "SkyGlass/" FW_VERSION " (+https://github.com/SilentWolf75/skyglass)"
 
-// CARTO basemaps: no API key, dark/light variants without labels (labels are unreadable
-// at this scale and fight with the callsign text drawn above them).
-#define MAP_HOST_FMT "https://basemaps.cartocdn.com/%s/%d/%d/%d.png"
+// OpenStreetMap standard tiles. CARTO used to serve this: it needed no key, and its
+// dark_nolabels variant was exactly the right look. It now stamps "API KEY REQUIRED"
+// across every tile and still returns HTTP 200, so the firmware faithfully downloaded
+// and drew the watermark.
+//
+// OSM needs no key either, but its tiles are bright, colourful and labelled -- the
+// opposite of what belongs under a phosphor scope. They are re-shaded on the way in;
+// see map_shade(). Tiles are only fetched for the view actually on screen, never
+// pre-emptively, which is what the OSM tile policy asks for.
+#define MAP_HOST_FMT "https://tile.openstreetmap.org/%d/%d/%d.png"
 
 enum MapState { MAP_IDLE, MAP_FETCH, MAP_COMPOSE };
 
@@ -173,6 +183,43 @@ void map_client_request(double lat, double lon, float rangeKm) {
 }
 
 // --- tile decode ---------------------------------------------------------------
+// OSM's land fill is the brightest thing on a tile, so distance from it is a good proxy
+// for "this pixel is a feature": water, roads and boundaries all move away from that
+// tone. Keying off the difference gives near-black land with the features faintly lit --
+// the CARTO dark look -- where simply darkening the tile leaves a mid-grey field that
+// washes out the scope drawn on top of it.
+#define MAP_LAND_LUMA  236
+
+static inline uint16_t map_shade(uint16_t px) {
+    const int r = ((px >> 11) & 0x1F) << 3;
+    const int g = ((px >> 5) & 0x3F) << 2;
+    const int b = (px & 0x1F) << 3;
+    const int y = (r * 77 + g * 151 + b * 28) >> 8;      // luma
+    if (s_style == 1) {                                   // light: just take the edge off
+        const int v = (y * 3 + 255) >> 2;                 // desaturate towards white
+        return (uint16_t)((v >> 3) | ((v >> 2) << 5) | ((v >> 3) << 11));
+    }
+    // Place labels and road shields are baked into these tiles -- tile.openstreetmap.org
+    // has no no-labels variant -- and they are the darkest pixels present. Scoring them
+    // by distance from land makes them the *brightest* thing on the scope, right where
+    // the callsigns are drawn. Anything much darker than land is treated as text and
+    // pushed down to near nothing. The threshold sits above the motorway casings, which
+    // is why it is 150 and not higher: at 170 the major roads start breaking up too.
+    int v;
+    if (y < 150) {
+        v = 14;
+    } else {
+        int f = y - MAP_LAND_LUMA;
+        if (f < 0) f = -f;
+        v = (f * 200) / 100;                              // gain
+        if (v > 120) v = 120;                             // cap, so motorways do not glare
+    }
+    const int rr = (v * 78) / 100, gg = v, bb = (v * 118) / 100;   // cool grey-blue
+    return (uint16_t)(((bb > 255 ? 255 : bb) >> 3) |
+                      (((gg > 255 ? 255 : gg) >> 2) << 5) |
+                      (((rr > 255 ? 255 : rr) >> 3) << 11));
+}
+
 static int map_png_line(PNGDRAW *draw) {
     if (!s_mosaic) return 0;
     const int y = s_dstY + draw->y;
@@ -183,7 +230,7 @@ static int map_png_line(PNGDRAW *draw) {
     for (int x = 0; x < w; ++x) {
         const int dx = s_dstX + x;
         if (dx < 0 || dx >= s_mosaicW) continue;
-        s_mosaic[(size_t)y * s_mosaicW + dx] = line[x];
+        s_mosaic[(size_t)y * s_mosaicW + dx] = map_shade(line[x]);
     }
     return 1;
 }
@@ -196,8 +243,7 @@ static bool fetch_one_tile(int idx) {
     const int wrapX = ((tx % span) + span) % span;     // wrap across the date line
 
     char url[160];
-    snprintf(url, sizeof(url), MAP_HOST_FMT,
-             s_style == 1 ? "light_nolabels" : "dark_nolabels", s_zoom, wrapX, ty);
+    snprintf(url, sizeof(url), MAP_HOST_FMT, s_zoom, wrapX, ty);
 
     uint8_t *png = nullptr; size_t len = 0;
     if (!net_fetch_psram(url, MAP_UA, &png, &len, 131072, 3500, 8000)) {

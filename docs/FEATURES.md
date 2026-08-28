@@ -44,7 +44,7 @@ need a third-party account are off until a key is entered on the config page.
     (5–150 km) instead of stepping through fixed values. The gesture only re-projects the
     view; the feed re-query and the NVS write happen once, when the fingers lift. A pinch
     never registers as a tap or a swipe.
-16. **Map background** — dark or light [CARTO](https://carto.com/attribution/) basemap
+16. **Map background** — dark or light [OpenStreetMap](https://www.openstreetmap.org/copyright) basemap, re-shaded on the device
     tiles beneath the scope. The scope is azimuthal-equidistant and tiles are Web
     Mercator, so the mosaic is resampled per pixel through the inverse scope projection,
     keeping the map aligned with the range rings at any zoom. Tiles are fetched one per

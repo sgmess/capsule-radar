@@ -1,7 +1,7 @@
 #pragma once
 // SkyGlass — build & user configuration.
 
-#define FW_VERSION "1.19.4"   // shown on the web config page + Stats screen; bump on release
+#define FW_VERSION "1.19.5"   // shown on the web config page + Stats screen; bump on release
 // ---------- Board selection ----------
 // Everything hardware-specific (screen geometry, pin map, which peripherals exist)
 // lives in src/boards/<board>.h. Pick one with a -D flag in platformio.ini; the
@@ -66,7 +66,7 @@ static const float RANGE_STEPS_KM[] = {1.60934f, 4.82803f, 10.0f, 20.0f, 30.0f, 
 // (blank = use the public feeds). This is the path every one of those serves the decoded
 // picture on; the ADSB Exchange and PiAware images both include tar1090.
 #define ADSB_LOCAL_PATH     "/tar1090/data/aircraft.json"
-#define ADSB_USER_AGENT     "SkyGlass/1.0 (ESP32-S3 hobby; +https://github.com/SilentWolf75/skyglass)"
+#define ADSB_USER_AGENT     "SkyGlass/" FW_VERSION " (hobby; +https://github.com/SilentWolf75/skyglass)"
 #define ADSB_HTTPS_INSECURE 1               // 1 = setInsecure() (hobby). 0 = use pinned root CA.
 // Rows the contact list will build. Bounded because each row is LVGL pool memory and
 // the pool is fixed; the list is nearest-first so the cap keeps the contacts that matter.
