@@ -7,7 +7,11 @@
 #include "config.h"
 #include "radar_view.h"
 #include "ui.h"
-#include "touch_cst9217.h"
+#if TOUCH_DRIVER_FT3168
+#include "touch_ft3168.h"       // 1.43: FT3168
+#else
+#include "touch_cst9217.h"      // 1.75: CST9217
+#endif
 
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
@@ -313,7 +317,7 @@ bool begin() {
         s_indev_drv.type = LV_INDEV_TYPE_POINTER;
         s_indev_drv.read_cb = touch_read_cb;
         lv_indev_drv_register(&s_indev_drv);
-        Serial.println("[display] CST9217 touch registered");
+        Serial.println("[display] touch registered (" BOARD_NAME ")");
     }
 
     Serial.printf("[display] PSRAM free: %u KB\n", (unsigned)(ESP.getFreePsram() / 1024));

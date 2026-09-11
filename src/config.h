@@ -8,6 +8,8 @@
 // 1.75" AMOLED board is the default so existing builds are unaffected.
 #if defined(BOARD_WAVESHARE_P4_LCD_4C)
 #  include "boards/waveshare_p4_lcd_4c.h"
+#elif defined(BOARD_WAVESHARE_S3_AMOLED_143)
+#  include "boards/waveshare_s3_amoled_143.h"
 #elif defined(BOARD_WAVESHARE_S3_AMOLED_175) || 1
 #  include "boards/waveshare_s3_amoled_175.h"
 #endif

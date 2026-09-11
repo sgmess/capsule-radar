@@ -1,8 +1,13 @@
 // CST9217 capacitive touch over I2C (Arduino). Ported from Waveshare's
 // esp_lcd_touch_cst9217: read 10 bytes from reg 0xD000, validate ACK 0xAB,
 // unpack the 12-bit X/Y of the first touch point. Single-touch is enough here.
-#include "touch_cst9217.h"
 #include "config.h"
+
+// Fenced so a board that selects a different controller does not link two drivers
+// defining the same symbols. Previously unguarded, which was fine while the only other
+// driver (GT911) was itself board-guarded.
+#if !TOUCH_DRIVER_FT3168
+#include "touch_cst9217.h"
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -85,3 +90,5 @@ int touch_read_points(uint16_t x[2], uint16_t y[2]) {
     if (points >= 2 && cst_unpack_point(d + 7, &x[n], &y[n])) ++n;
     return n;
 }
+
+#endif  // !TOUCH_DRIVER_FT3168

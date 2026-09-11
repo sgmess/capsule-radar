@@ -13,6 +13,7 @@
 #define BOARD_HOSTNAME      "skyglass-s3"
 #define BOARD_SETUP_AP      "SkyGlass-S3-Setup"
 #define BOARD_NAME          "Waveshare ESP32-S3-Touch-AMOLED-1.75"
+#define BOARD_PIO_ENV       "esp32-s3-amoled-175"   // used in the OTA hint printed at boot
 #define BOARD_PANEL_QSPI    1        // Arduino_GFX + CO5300 over QSPI
 #define BOARD_PANEL_DSI     0
 

@@ -24,6 +24,7 @@
 #define BOARD_HOSTNAME      "skyglass-p4"
 #define BOARD_SETUP_AP      "SkyGlass-P4-Setup"
 #define BOARD_NAME          "Waveshare ESP32-P4-WIFI6-Touch-LCD-4C"
+#define BOARD_PIO_ENV       "esp32-p4-lcd-4c"   // used in the OTA hint printed at boot
 #define BOARD_PANEL_QSPI    0
 #define BOARD_PANEL_DSI     1        // esp_lcd_mipi_dsi, NOT Arduino_GFX
 
