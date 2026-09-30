@@ -1,8 +1,9 @@
 # Hardware
 
-Capsule Radar supports two Waveshare round-AMOLED boards. Both use the same SoC and
-the same 466×466 CO5300 panel, but their **pin maps have nothing in common** — flashing
-one board's image onto the other gives a black screen and a silent I2C bus.
+Capsule Radar supports three Waveshare round boards on the same ESP32-S3R8 SoC. The two
+AMOLEDs share the 466×466 CO5300 panel; the 2.8C is a 480×480 ST7701 IPS on a parallel
+RGB bus. Their **pin maps have nothing in common**: flashing one board's image onto
+another gives a black screen and a silent I2C bus.
 
 Pin maps live one-per-board in [`../src/boards/`](../src/boards/) and are selected by a
 build flag (see [`../src/config.h`](../src/config.h)):
@@ -11,6 +12,8 @@ build flag (see [`../src/config.h`](../src/config.h)):
 |---|---|---|---|
 | ESP32-S3-Touch-AMOLED-1.75 (reference) | `esp32-s3-amoled-175` | *(default)* | `board_amoled_175.h` |
 | ESP32-S3-Touch-AMOLED-1.43 | `esp32-s3-amoled-143` | `-DBOARD_AMOLED_143` | `board_amoled_143.h` |
+| ESP32-S3-LCD-2.8C (non-touch) | `esp32-s3-lcd-28c` | `-DBOARD_LCD_28C` | `board_lcd_28c.h` |
+| ESP32-S3-Touch-LCD-2.8C | `esp32-s3-touch-lcd-28c` | `-DBOARD_TOUCH_LCD_28C` | `board_touch_lcd_28c.h` |
 
 ---
 
@@ -84,6 +87,63 @@ full-panel rim-ring test card one pixel at a time until it centred.
 
 ---
 
+## ESP32-S3-LCD-2.8C (non-touch) and ESP32-S3-Touch-LCD-2.8C
+
+Board support comes from [@ijord's port](https://github.com/ijord/capsule-radar), where it
+runs on real hardware. Same SoC, 8 MB PSRAM / 16 MB flash; almost everything else differs:
+
+- **Display is an ST7701 480×480 round IPS on a 16-bit parallel RGB bus**, with no GRAM.
+  The S3's LCD peripheral scans a full framebuffer out of PSRAM continuously (esp_lcd RGB
+  driver, double-buffered, 30-line internal bounce buffers). The panel takes its init
+  sequence over a 9-bit 3-wire SPI whose **CS and reset are on the TCA9554 IO expander**.
+  Backlight is LEDC PWM on GPIO 6 (20 kHz / 10-bit), not a panel command.
+- **Touch depends on the variant.** The *Touch*-LCD-2.8C adds a **GT911** (I2C `0x5D`, INT
+  GPIO 16, reset on expander EXIO2; raw coordinates match the panel) and otherwise matches
+  the non-touch board exactly: same pins, same RGB timing, and a byte-identical ST7701 init
+  sequence in both vendor demos. Its header just includes `board_lcd_28c.h` and adds touch.
+  On the **non-touch** board the **BOOT button** navigates: click = next view (radar → list →
+  stats → weather), long press (≥ 0.7 s) = next range step. Tap-to-inspect and the
+  on-screen zoom button are unreachable there, and auto-dim defaults to off.
+- **Buzzer, not a speaker**: an on/off active buzzer on expander pin EXIO8 plays the alert
+  patterns (`audio_buzzer.cpp`). No volume control.
+- **Battery by ADC divider** on GPIO 4 (×3.0, calibration from the vendor demo), not a PMIC.
+  Charging is inferred from the rail voltage (> 4.10 V); USB with no battery reads as
+  "charging".
+- **Radar sweep is composited outside LVGL** (`compose_step()` in `display.cpp`): LVGL only
+  re-renders when data changes, which keeps the PSRAM bus quiet enough for the scanout.
+- Needs its own PlatformIO platform (pioarduino 55.03.311 / core 3.3.11) with a custom
+  sdkconfig: **XIP from PSRAM** (otherwise the scanout ISR panics on every NVS write),
+  IRAM-safe RGB ISR, `CONFIG_LCD_RGB_RESTART_IN_VSYNC` to self-heal underruns, and the
+  64-byte data-cache line from Waveshare's own `sdkconfig.defaults` (more PSRAM bandwidth
+  for the scanout; the Arduino default is 32 B). Built with `-O2`. The first
+  build rebuilds the Arduino core libs and is slow; later builds are cached.
+- **The USB-C port is a CH343P USB-UART bridge on UART0** (GPIO 43/44), not the S3's
+  native USB, so these envs build with `ARDUINO_USB_CDC_ON_BOOT=0`. With the AMOLED
+  default (`=1`) the serial log goes to the native-USB pins and never reaches the cable.
+- LVGL's object pool lives in PSRAM on this board (`include/lv_conf.h`) so mbedTLS still
+  finds its contiguous internal blocks next to the bounce buffers.
+
+| Signal | GPIO | | Signal | GPIO |
+|---|---|---|---|---|
+| RGB HSYNC / VSYNC | 38 / 39 | | I2C SDA | 15 |
+| RGB DE / PCLK | 40 / 41 | | I2C SCL | 7 |
+| RGB D0–D7 | 5, 45, 48, 47, 21, 14, 13, 12 | | Backlight PWM | 6 |
+| RGB D8–D15 | 11, 10, 9, 46, 3, 8, 18, 17 | | Battery ADC | 4 |
+| ST7701 SPI SCLK / MOSI | 2 / 1 | | BOOT button | 0 |
+| ST7701 RST / CS | EXIO1 / EXIO3 | | Buzzer | EXIO8 |
+| Touch INT (Touch variant) | 16 | | Touch RST (Touch variant) | EXIO2 |
+
+RGB timing: PCLK **16 MHz** (~57 Hz). The demo's 30 MHz saturates PSRAM and the image drifts
+sideways under WiFi load. HSYNC pw/bp/fp 8/10/50, VSYNC 2/18/8.
+I2C: TCA9554 `0x20`, QMI8658 `0x6B`, PCF85063 `0x51`, GT911 `0x5D` (Touch variant).
+
+Sources: the Waveshare factory demo (`ESP32-S3-LCD-2.8C-Demo.zip`, Arduino
+`LVGL_Arduino`: `Display_ST7701.h`, `I2C_Driver.h`, `BAT_Driver.h`, `Button_Driver.h`;
+buzzer bit from the ESP-IDF demo's `Buzzer.c`), and the Touch-LCD-2.8C factory demo
+(`ESP32-S3-Touch-LCD-2.8C-Demo.zip`: `Touch_GT911.*`, ESP-IDF `sdkconfig.defaults`).
+
+---
+
 ## Adding another board
 
 1. Copy a header in `src/boards/`, fill in the pins **from the vendor demo or the Arduino
@@ -98,4 +158,6 @@ full-panel rim-ring test card one pixel at a time until it centred.
 ## Reference
 - 1.75 wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75
 - 1.43 wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.43
+- 2.8C docs: https://docs.waveshare.com/ESP32-S3-LCD-2.8C
+- Touch-LCD-2.8C wiki: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8C
 - ESPHome device page (1.75 pin source): https://devices.esphome.io/devices/waveshare-esp32-s3-touch-amoled-175/

@@ -40,7 +40,7 @@ void battery_enable_codec_rail() {
     Serial.println("[batt] ALDO1 (codec AVDD) enabled @3.3V");
 }
 
-#else   // !BOARD_HAS_PMIC
+#elif !BOARD_HAS_BATT_ADC   // no gauge at all (the ADC divider lives in battery_adc.cpp)
 
 bool battery_begin()   { Serial.println("[batt] no PMIC on this board"); return false; }
 bool battery_present() { return false; }
@@ -48,4 +48,4 @@ int  battery_percent() { return -1; }
 bool battery_charging(){ return false; }
 void battery_enable_codec_rail() {}
 
-#endif  // BOARD_HAS_PMIC
+#endif  // BOARD_HAS_PMIC / !BOARD_HAS_BATT_ADC

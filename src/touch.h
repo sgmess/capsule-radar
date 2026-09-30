@@ -3,6 +3,7 @@
 // Exactly one driver compiles per build, chosen by the board header:
 //   TOUCH_DRIVER_CST9217 -> touch_cst9217.cpp  (1.75)
 //   TOUCH_DRIVER_FT3168  -> touch_ft3168.cpp   (1.43)
+//   TOUCH_DRIVER_GT911   -> touch_gt911.cpp    (Touch-LCD-2.8C)
 #include <stdint.h>
 
 bool touch_begin();                        // I2C + reset; logs comms status

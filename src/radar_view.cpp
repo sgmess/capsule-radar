@@ -8,6 +8,9 @@
 #include "geo.h"
 #include "coastline.h"
 #include "airports.h"
+#if BOARD_PANEL_ST7701
+#include "display.h"   // sweep compositor handoff (2.8C only)
+#endif
 #include <lvgl.h>
 #include <math.h>
 #include <stdio.h>
@@ -52,11 +55,8 @@
 #define ORB_FLOW   lv_color_hex(0xFFC24D)
 
 // ---- sweep config ----
-#define SWEEP_PERIOD_MS   8000
-#define SWEEP_FRAME_MS    30
-#define SWEEP_TRAIL_DEG   38.0f
+// (period/cadence/fade live in config.h — shared with the 2.8C compositor)
 #define SWEEP_TRAIL_STEPS 20
-#define SWEEP_TRAIL_OPA   72
 
 // ---- aircraft / flow / orb config ----
 #define TRAIL_MAX         7
@@ -230,7 +230,10 @@ static void grid_draw_cb(lv_event_t *e) {
     lv_draw_arc_dsc_init(&ad);
     ad.color = s_cRing;
     ad.width = 2;
-    const lv_coord_t rr[4] = { 50, 104, 160, RADAR_R_OUTER_PX };
+    // ring/crosshair geometry tuned at R=218 (the AMOLED boards); scale to other panels
+    const float rk = RADAR_R_OUTER_PX / 218.0f;
+    const lv_coord_t rr[4] = { (lv_coord_t)lroundf(50 * rk), (lv_coord_t)lroundf(104 * rk),
+                               (lv_coord_t)lroundf(160 * rk), RADAR_R_OUTER_PX };
     const lv_opa_t   ro[4] = { 66, 66, 66, 87 };
     for (int i = 0; i < 4; ++i) { ad.opa = ro[i]; lv_draw_arc(d, &ad, &c, rr[i], 0, 360); }
 
@@ -239,15 +242,28 @@ static void grid_draw_cb(lv_event_t *e) {
     ll.color = s_cRing;
     ll.width = 2;
     ll.opa = 41;
-    lv_point_t h1 = { (lv_coord_t)(s_cx - 211), s_cy }, h2 = { (lv_coord_t)(s_cx + 211), s_cy };
-    lv_point_t v1 = { s_cx, (lv_coord_t)(s_cy - 211) }, v2 = { s_cx, (lv_coord_t)(s_cy + 211) };
+    const lv_coord_t ch = (lv_coord_t)lroundf(211 * rk);
+    lv_point_t h1 = { (lv_coord_t)(s_cx - ch), s_cy }, h2 = { (lv_coord_t)(s_cx + ch), s_cy };
+    lv_point_t v1 = { s_cx, (lv_coord_t)(s_cy - ch) }, v2 = { s_cx, (lv_coord_t)(s_cy + ch) };
     lv_draw_line(d, &ll, &h1, &h2);
     lv_draw_line(d, &ll, &v1, &v2);
+}
+
+// Push sweep colors/enable to the 2.8C display compositor, which blends the sweep
+// into the scanout AFTER LVGL (so the 30 ms tick stops forcing full-stack repaints).
+// No-op on the AMOLEDs / simulator, where the LVGL fan below still draws it.
+static void sync_external_sweep() {
+#if BOARD_PANEL_ST7701
+    display::sweepConfig(s_cRing.full, s_cLead.full, s_sweepEnabled && !orb());
+#endif
 }
 
 // =============================== sweep =======================================
 static void sweep_draw_cb(lv_event_t *e) {
     if (orb()) return;
+#if BOARD_PANEL_ST7701
+    if (display::sweepCompositor()) return;    // sweep is composited post-LVGL
+#endif
     lv_draw_ctx_t *dctx = lv_event_get_draw_ctx(e);
     const lv_point_t center = { s_cx, s_cy };
     const float R = (float)RADAR_R_OUTER_PX;
@@ -270,7 +286,7 @@ static void sweep_draw_cb(lv_event_t *e) {
     lv_draw_line_dsc_init(&le);
     le.color = s_cLead;
     le.width = 2;
-    le.opa = 217;
+    le.opa = SWEEP_LEAD_OPA;
     le.round_start = 1;
     le.round_end = 1;
     lv_point_t lead = rim_point(s_sweepDeg, R);
@@ -349,6 +365,9 @@ static void sweep_timer_cb(lv_timer_t *t) {
         return;
     }
     if (!s_sweepEnabled) return;          // sweep disabled: glyph interpolation above still runs
+#if BOARD_PANEL_ST7701
+    if (display::sweepCompositor()) return;    // compositor animates the sweep, no LVGL repaint
+#endif
     s_prevSweepDeg = s_sweepDeg;
     s_sweepDeg += 360.0f * (float)SWEEP_FRAME_MS / (float)SWEEP_PERIOD_MS;
     if (s_sweepDeg >= 360.0f) s_sweepDeg -= 360.0f;
@@ -586,6 +605,7 @@ void setTheme(int t) {
     if (s_rangeLbl)  lv_obj_set_style_text_color(s_rangeLbl, s_cRing, 0);
 
     flow_redraw_all();
+    sync_external_sweep();                     // retint / orb-hide the composited sweep
     if (s_parent) lv_obj_invalidate(s_parent);
     if (s_themeCb) s_themeCb(s_theme);
 }
@@ -597,6 +617,7 @@ void setRangeLabelVisible(bool v) { s_rangeLblVisible = v; if (s_rangeLbl) show(
 
 void setSweepEnabled(bool on) {
     s_sweepEnabled = on;
+    sync_external_sweep();
     if (s_sweep) {
         show(s_sweep, on);
         if (!on) lv_obj_invalidate(s_sweep);   // clear any wedge currently painted

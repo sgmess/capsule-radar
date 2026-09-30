@@ -238,7 +238,7 @@ void audio_selftest() {   // ~2 s continuous tone, ignores mute, PA held on
     if (s_sem) xSemaphoreGive(s_sem);
 }
 
-#else   // !BOARD_HAS_AUDIO
+#elif !BOARD_HAS_BUZZER   // no codec and no buzzer (the buzzer lives in audio_buzzer.cpp)
 
 bool audio_begin()              { Serial.println("[audio] no codec on this board"); return false; }
 bool audio_present()            { return false; }
@@ -247,4 +247,4 @@ void audio_set_muted(bool)      {}
 void audio_play(AudioCue)       {}
 void audio_selftest()           {}
 
-#endif  // BOARD_HAS_AUDIO
+#endif  // BOARD_HAS_AUDIO / !BOARD_HAS_BUZZER

@@ -26,10 +26,22 @@
    MEMORY SETTINGS
  *=========================*/
 /* Object/style pool (internal RAM). Big bitmap draw buffers are allocated
-   separately in PSRAM in display.cpp. Bump this if the radar UI grows. */
-#define LV_MEM_CUSTOM 0
-#define LV_MEM_SIZE (64U * 1024U)
-#define LV_MEM_ADR 0
+   separately in PSRAM in display.cpp. Bump this if the radar UI grows.
+   Exception, the 2.8C (ST7701 RGB): its scanout bounce buffers already take ~58 KB of
+   internal RAM, and a 64 KB static pool on top left mbedTLS without the two ~16.7 KB
+   CONTIGUOUS blocks each handshake needs -> every fetch failed. There the pool lives in
+   PSRAM (ps_malloc); widget allocs are not hot-path once the sweep compositor runs. */
+#if defined(BOARD_LCD_28C) || defined(BOARD_TOUCH_LCD_28C)
+#  define LV_MEM_CUSTOM 1
+#  define LV_MEM_CUSTOM_INCLUDE "esp32-hal-psram.h"
+#  define LV_MEM_CUSTOM_ALLOC   ps_malloc
+#  define LV_MEM_CUSTOM_FREE    free
+#  define LV_MEM_CUSTOM_REALLOC ps_realloc
+#else
+#  define LV_MEM_CUSTOM 0
+#  define LV_MEM_SIZE (64U * 1024U)
+#  define LV_MEM_ADR 0
+#endif
 #define LV_MEM_BUF_MAX_NUM 16
 #define LV_MEMCPY_MEMSET_STD 0
 

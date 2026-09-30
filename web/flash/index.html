@@ -44,7 +44,7 @@
 <body>
   <div class="radar"></div>
   <h1>Capsule Radar</h1>
-  <div class="sub">Live ADS-B aircraft radar · Waveshare ESP32-S3 round AMOLED boards</div>
+  <div class="sub">Live ADS-B aircraft radar · Waveshare ESP32-S3 round AMOLED &amp; LCD boards</div>
 
   <div class="card">
     <p style="margin-top:0">Flash the firmware straight from your browser — no toolchain, no PlatformIO.</p>
@@ -53,6 +53,10 @@
         <b>1.75&Prime;</b><span>ESP32-S3-Touch-AMOLED-1.75 (also -G)</span></label>
       <label class="board"><input type="radio" name="board" value="manifest-amoled143.json">
         <b>1.43&Prime;</b><span>ESP32-S3-Touch-AMOLED-1.43</span></label>
+      <label class="board"><input type="radio" name="board" value="manifest-touchlcd28c.json">
+        <b>2.8&Prime; Touch</b><span>ESP32-S3-Touch-LCD-2.8C</span></label>
+      <label class="board"><input type="radio" name="board" value="manifest-lcd28c.json">
+        <b>2.8&Prime;</b><span>ESP32-S3-LCD-2.8C (non-touch)</span></label>
     </div>
     <esp-web-install-button id="install" manifest="manifest.json">
       <button slot="activate">⚡ Install Capsule Radar</button>

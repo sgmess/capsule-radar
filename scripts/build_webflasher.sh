@@ -37,3 +37,5 @@ build_one() {   # build_one <pio-env> <output-bin>
 
 build_one esp32-s3-amoled-175 web/flash/CapsuleRadar-esp32s3.bin
 build_one esp32-s3-amoled-143 web/flash/CapsuleRadar-esp32s3-amoled143.bin
+build_one esp32-s3-lcd-28c    web/flash/CapsuleRadar-esp32s3-lcd28c.bin
+build_one esp32-s3-touch-lcd-28c web/flash/CapsuleRadar-esp32s3-touchlcd28c.bin

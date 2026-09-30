@@ -20,12 +20,16 @@
 #include "cloud_image_client.h"
 #include "radar_view.h"
 #include "ui.h"
-#include "display.h"                  // M0: CO5300 + LVGL bring-up
+#include "display.h"                  // panel (CO5300 or ST7701) + LVGL bring-up
 #include "imu_qmi8658.h"             // face-down sleep
 #include "gps.h"                     // LC76G GNSS (-G variant only)
-#include "battery.h"                 // AXP2101 battery gauge
+#include "battery.h"                 // battery gauge (AXP2101, or the 2.8C's ADC divider)
 #include "rtc_pcf85063.h"            // PCF85063 RTC (offline clock + date)
-#include "audio.h"                   // ES8311 alert pings
+#include "audio.h"                   // alert pings (ES8311 speaker, or the 2.8C's buzzer)
+#if !BOARD_HAS_TOUCH
+#include "button_input.h"            // touchless board: BOOT button = view/range control
+#include <lvgl.h>                    // lv_disp_trig_activity: presses reset the idle-dim timer
+#endif
 #include <set>                       // audio: track which contacts are in range
 #include <string>
 #include <WiFiManager.h>             // captive portal
@@ -1021,7 +1025,10 @@ void setup() {
     ui_set_range_km(g_settings.rangeKm);         // show the loaded range
 
     imu_begin();       // face-down sleep (no-op if the IMU isn't detected)
-    battery_begin();   // AXP2101 (no-op if not detected / no battery)
+#if !BOARD_HAS_TOUCH
+    button_begin();    // BOOT button: click = next view, long press = next range
+#endif
+    battery_begin();   // AXP2101 / ADC divider (no-op if not detected / no battery)
     gps_begin();       // LC76G GNSS (no-op if not the -G variant)
     battery_enable_codec_rail();   // power the ES8311 analog rail before audio init
 
@@ -1239,6 +1246,34 @@ void loop() {
             }
         }
     }
+
+#if !BOARD_HAS_TOUCH
+    // Touchless board: the BOOT button stands in for swipes and the zoom button.
+    switch (button_poll()) {
+        case BTN_CLICK:                          // cycle radar -> list -> stats -> weather
+            lv_disp_trig_activity(NULL);         // wake/undim, like a touch would
+            g_lastView = (g_lastView + 1) % 4;
+            ui_show_view(g_lastView);
+            {
+                Preferences p;                   // programmatic switch: the swipe cb won't fire
+                p.begin("capsuleradar", false);
+                p.putInt("lastview", g_lastView);
+                p.end();
+            }
+            break;
+        case BTN_LONG: {                         // step the display range, like the zoom button
+            lv_disp_trig_activity(NULL);
+            const int n = sizeof(RANGE_STEPS_KM) / sizeof(RANGE_STEPS_KM[0]);
+            int cur = 0;
+            for (int i = 1; i < n; ++i)
+                if (fabsf(RANGE_STEPS_KM[i] - g_settings.rangeKm) <
+                    fabsf(RANGE_STEPS_KM[cur] - g_settings.rangeKm)) cur = i;
+            onRangeChange(RANGE_STEPS_KM[(cur + 1) % n]);
+            break;
+        }
+        default: break;
+    }
+#endif
 
     // face-down -> screen off (IMU); flip face-up to wake
     static uint32_t lastImu = 0;

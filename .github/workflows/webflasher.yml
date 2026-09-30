@@ -44,6 +44,8 @@ jobs:
         run: |
           pio run -e esp32-s3-amoled-175
           pio run -e esp32-s3-amoled-143
+          pio run -e esp32-s3-lcd-28c
+          pio run -e esp32-s3-touch-lcd-28c
 
       - name: Host tests
         run: ./tests/run_host_tests.sh
@@ -52,10 +54,10 @@ jobs:
         run: |
           BOOT_APP0="$(find "$HOME/.platformio/packages" -name boot_app0.bin -path '*framework-arduinoespressif32*' | head -1)"
           mkdir -p site
-          cp web/flash/index.html web/flash/manifest.json web/flash/manifest-amoled143.json site/
+          cp web/flash/index.html web/flash/manifest.json web/flash/manifest-amoled143.json web/flash/manifest-lcd28c.json web/flash/manifest-touchlcd28c.json site/
           # stamp the flasher page + manifests with the firmware version being built
           VER=$(grep -oE 'FW_VERSION "[0-9.]+"' src/config.h | grep -oE '[0-9.]+' | head -1)
-          sed -i "s/__FWVER__/${VER:-dev}/g" site/index.html site/manifest.json site/manifest-amoled143.json
+          sed -i "s/__FWVER__/${VER:-dev}/g" site/index.html site/manifest.json site/manifest-amoled143.json site/manifest-lcd28c.json site/manifest-touchlcd28c.json
           merge() {   # merge <pio-env> <output-bin>
             python -m esptool --chip esp32s3 merge_bin -o "$2" \
               --flash_mode dio --flash_freq 80m --flash_size 16MB \
@@ -66,6 +68,8 @@ jobs:
           }
           merge esp32-s3-amoled-175 site/CapsuleRadar-esp32s3.bin
           merge esp32-s3-amoled-143 site/CapsuleRadar-esp32s3-amoled143.bin
+          merge esp32-s3-lcd-28c    site/CapsuleRadar-esp32s3-lcd28c.bin
+          merge esp32-s3-touch-lcd-28c site/CapsuleRadar-esp32s3-touchlcd28c.bin
 
       - uses: actions/upload-pages-artifact@v3
         with:

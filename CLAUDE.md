@@ -25,6 +25,18 @@ the display is initialised, and its QSPI CS/SCLK (GPIO 9/10) are the 1.75's I2S 
 which is why audio must stay compiled out here. The panel gap is the same 6 as the 1.75.
 Full detail in `docs/HARDWARE.md`.
 
+### Third supported board: ESP32-S3-Touch-LCD-2.8C / ESP32-S3-LCD-2.8C
+Same SoC, but an **ST7701 480x480 IPS on a 16-bit parallel RGB bus** (esp_lcd RGB driver, no
+Arduino_GFX), a TCA9554 IO expander holding the panel CS/reset and a buzzer, an ADC battery
+divider. The Touch variant adds a GT911 (`board_touch_lcd_28c.h` includes the non-touch
+header and adds touch; `-e esp32-s3-touch-lcd-28c`). The non-touch one has **no touch** (BOOT
+button: click = next view, long = next range; `-e esp32-s3-lcd-28c`). Pins in
+`src/boards/board_lcd_28c.h`, from @ijord's hardware-tested port and the vendor demos.
+Gotchas: it needs its own platform + `custom_sdkconfig` (XIP from PSRAM, or the scanout ISR
+panics on flash writes); the sweep is composited outside LVGL (`compose_step()` in display.cpp),
+so the radar sweep code in radar_view.cpp is skipped there; internal RAM is tight (bounce
+buffers + TLS), so its LVGL draw buffer is 12 lines and the LVGL pool lives in PSRAM.
+
 ## Stack decision
 **PlatformIO + Arduino framework.** Libraries:
 - `moononournation/GFX Library for Arduino` (Arduino_GFX) — CO5300 QSPI panel driver + framebuffer.
@@ -86,6 +98,8 @@ plane-radar-2.0/
 ```
 pio run -e esp32-s3-amoled-175              # build (reference board)
 pio run -e esp32-s3-amoled-143              # build (1.43)
+pio run -e esp32-s3-touch-lcd-28c           # build (Touch-LCD-2.8C; first build is slow)
+pio run -e esp32-s3-lcd-28c                 # build (LCD-2.8C non-touch)
 pio run -e esp32-s3-amoled-175 -t upload    # flash over USB-C
 pio device monitor -b 115200                # serial
 ```

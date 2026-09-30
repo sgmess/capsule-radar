@@ -1,0 +1,13 @@
+{
+  "name": "Capsule Radar (Touch-LCD 2.8C)",
+  "version": "__FWVER__",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "CapsuleRadar-esp32s3-touchlcd28c.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,9 @@
 #include "cloud_image.h"
 #include "airports.h"
 #include "config.h"
+#if BOARD_PANEL_ST7701
+#include "display.h"   // sweep compositor visibility (2.8C only)
+#endif
 #include <lvgl.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -676,8 +679,17 @@ static void build_card(void) {
     lv_obj_add_flag(s_photoCredit, LV_OBJ_FLAG_HIDDEN);
 }
 
+// The 2.8C composites the sweep outside LVGL, so it has to be told when the radar tile
+// is off screen (on the AMOLEDs the sweep layer simply scrolls away with its tile).
+static void sync_sweep_visibility(void) {
+#if BOARD_PANEL_ST7701
+    display::sweepSetVisible(active_view_index() == 0);
+#endif
+}
+
 void ui_show_view(int idx) {
     if (s_tv && idx >= 0 && idx <= 3) lv_obj_set_tile_id(s_tv, (uint32_t)idx, 0, LV_ANIM_OFF);
+    sync_sweep_visibility();
 }
 
 // ------------------------------------------------------------------- splash
@@ -763,6 +775,7 @@ void ui_create(void) {
     // (between polls they'd otherwise show whatever was there when last visible).
     lv_obj_add_event_cb(s_tv, [](lv_event_t *) {
         refresh_active_tile();
+        sync_sweep_visibility();
         if (s_viewChangedCb) s_viewChangedCb(active_view_index());   // let main remember the last view
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 

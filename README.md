@@ -51,14 +51,17 @@ The reference board is the Waveshare **ESP32-S3-Touch-AMOLED-1.75**: ESP32-S3R8 
 
 The Waveshare **ESP32-S3-Touch-AMOLED-1.43** is also supported in-tree. Same SoC, same 466×466 CO5300 panel — but a completely different pin map, an **FT3168** touch controller, and no PMIC or audio codec (so no battery readout and no alert pings; everything else works).
 
-| | 1.75 (reference) | 1.43 |
-|---|---|---|
-| PlatformIO env | `esp32-s3-amoled-175` | `esp32-s3-amoled-143` |
-| QSPI CS / SCLK / D0–D3 | 12 / 38 / 4,5,6,7 | 9 / 10 / 11,12,13,14 |
-| LCD reset | 39 | 21 |
-| I2C SDA / SCL | 15 / 14 | 47 / 48 |
-| Touch | CST9217 @ 0x5A | FT3168 @ 0x38 |
-| Battery / audio | AXP2101 / ES8311 | not fitted |
+The Waveshare **ESP32-S3-Touch-LCD-2.8C** and its non-touch sibling **ESP32-S3-LCD-2.8C** are supported in-tree too, thanks to [@ijord's port](https://github.com/ijord/capsule-radar). Both have a 480×480 **ST7701** IPS on a parallel RGB bus; alerts use the buzzer and battery is read from an ADC divider. The Touch board uses its **GT911** touch like the AMOLEDs. On the non-touch board the **BOOT button** navigates: click for the next view, long-press for the next range.
+
+| | 1.75 (reference) | 1.43 | 2.8C (Touch / non-touch) |
+|---|---|---|---|
+| PlatformIO env | `esp32-s3-amoled-175` | `esp32-s3-amoled-143` | `esp32-s3-touch-lcd-28c` / `esp32-s3-lcd-28c` |
+| Panel | CO5300 466×466 AMOLED, QSPI | CO5300 466×466 AMOLED, QSPI | ST7701 480×480 IPS, 16-bit RGB |
+| QSPI CS / SCLK / D0–D3 | 12 / 38 / 4,5,6,7 | 9 / 10 / 11,12,13,14 | — (see [HARDWARE.md](docs/HARDWARE.md)) |
+| LCD reset | 39 | 21 | TCA9554 EXIO1 |
+| I2C SDA / SCL | 15 / 14 | 47 / 48 | 15 / 7 |
+| Touch | CST9217 @ 0x5A | FT3168 @ 0x38 | GT911 @ 0x5D / none (BOOT button) |
+| Battery / audio | AXP2101 / ES8311 | not fitted | ADC divider / buzzer |
 
 Pin maps live in [`src/boards/`](src/boards/), one header per board, selected by a `-DBOARD_*` build flag. They are taken from the vendor board definition and then **confirmed on hardware** — never guessed. Shared tunables stay in [`src/config.h`](src/config.h).
 
@@ -84,6 +87,8 @@ The 1.75″ board is in a **global stock squeeze** right now (even Waveshare lis
 ```bash
 pio run -e esp32-s3-amoled-175 -t upload     # build + flash over USB-C (1.75)
 pio run -e esp32-s3-amoled-143 -t upload     # ...or the 1.43
+pio run -e esp32-s3-touch-lcd-28c -t upload  # ...or the Touch-LCD-2.8C (first build is slow: it rebuilds the core)
+pio run -e esp32-s3-lcd-28c -t upload        # ...or the non-touch LCD-2.8C
 pio device monitor -b 115200                  # serial log
 ```
 The boot log names the board it was built for (`Capsule Radar boot  fw … board …`) — worth checking first if the screen stays black, since the wrong board's image drives the wrong pins.
@@ -144,7 +149,7 @@ docs/                hardware / data-source / architecture notes
 The reference board is the **Waveshare ESP32-S3-Touch-AMOLED-1.75**, but other boards are welcome upstream: a port contributed as a pull request (its own PlatformIO env + board header in [`src/boards/`](src/boards/)) gets built by the CI on every release alongside the 1.75 — the in-tree **1.43** port is the worked example to copy, and the 2.1" port below is on that path. Ports that prefer to stay independent live as forks, linked here (MIT: fork away, and tell me so I can add yours).
 
 - **[Capsule Radar for the Waveshare ESP32-S3-Touch-LCD-2.1](https://github.com/alexzogh/capsule-radar/tree/port/esp32-s3-lcd-21)** by **@alexzogh (STLWarehouse)** — a full port to the 2.1" round LCD (ST7701), plus new features: **double-tap to track an aircraft** (scope re-centres on it), a **clock face on idle**, and the busy-airspace **query-radius fix** now merged back into this firmware. Ships its own binaries per release (files with `lcd21` in the name are the 2.1 builds).
-- **[Capsule Radar for the Waveshare 2.8" (non-touch)](https://github.com/ijord/capsule-radar)** by **@ijord** — port to the 2.8" ST7701 panel, with a smoother sweep compositor and the **PNG heap-corruption fix** that shipped upstream in v1.3.28. Thank you!
+- **[Capsule Radar for the Waveshare 2.8" (non-touch)](https://github.com/ijord/capsule-radar)** by **@ijord** — port to the 2.8" ST7701 panel, with a smoother sweep compositor and the **PNG heap-corruption fix** that shipped upstream in v1.3.28. Its board support (panel, compositor, buzzer, battery, button navigation) is now in-tree as the `esp32-s3-lcd-28c` env. Thank you!
 - **[Skyglass](https://github.com/SilentWolf75/skyglass)** by **@SilentWolf75** — an independently evolved sibling (190+ commits): **shaded OpenStreetMap basemap rendered on-device** and **ESP32-P4** support.
 
 ## Data & license

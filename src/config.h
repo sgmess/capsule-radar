@@ -3,6 +3,40 @@
 
 #define FW_VERSION "1.4.5"   // shown on the web config page + Stats screen; bump on release
 
+// ---------- Board ----------
+// The pin map, panel, touch driver and which peripherals exist all live in a
+// per-board header. Select one with a build flag in platformio.ini; the 1.75 is the
+// default so an unflagged build behaves exactly as before.
+//   -DBOARD_AMOLED_143  -> Waveshare ESP32-S3-Touch-AMOLED-1.43
+//   -DBOARD_LCD_28C     -> Waveshare ESP32-S3-LCD-2.8C (non-touch, ST7701 RGB)
+//   -DBOARD_TOUCH_LCD_28C -> Waveshare ESP32-S3-Touch-LCD-2.8C (same + GT911 touch)
+//   (none)              -> Waveshare ESP32-S3-Touch-AMOLED-1.75  (reference board)
+// Never guess pins for a new board: take them from the vendor demo or the Arduino
+// core board variant, then confirm them on hardware before committing.
+// Included first so a board can override the screen defaults below.
+#if defined(BOARD_AMOLED_143)
+#  include "boards/board_amoled_143.h"
+#elif defined(BOARD_TOUCH_LCD_28C)
+#  include "boards/board_touch_lcd_28c.h"
+#elif defined(BOARD_LCD_28C)
+#  include "boards/board_lcd_28c.h"
+#else
+#  include "boards/board_amoled_175.h"
+#endif
+// Defaults for capabilities the AMOLED headers predate.
+#ifndef BOARD_PANEL_ST7701
+#define BOARD_PANEL_ST7701  0              // 0 = CO5300 QSPI AMOLED via Arduino_GFX
+#endif
+#ifndef BOARD_HAS_TOUCH
+#define BOARD_HAS_TOUCH     1
+#endif
+#ifndef BOARD_HAS_BUZZER
+#define BOARD_HAS_BUZZER    0
+#endif
+#ifndef BOARD_HAS_BATT_ADC
+#define BOARD_HAS_BATT_ADC  0
+#endif
+
 // ---------- Home location (default: Dénia, Spain) ----------
 // Overridable at runtime via the captive portal (stored in NVS).
 #define HOME_LAT_DEFAULT   38.8409
@@ -28,18 +62,32 @@ static const float RANGE_STEPS_KM[] = {10.0f, 20.0f, 30.0f, 50.0f, 100.0f};
 #define WX_RADAR_REFRESH_MS 300000UL       // RainViewer frames update about every 5 minutes
 #define CLOUD_IMAGE_REFRESH_MS 600000UL    // EUMETSAT MTG cloud imagery; cache for 10 minutes
 
-// ---------- Screen (CO5300 AMOLED, 466x466 on every supported board) ----------
+// ---------- Screen ----------
+// 466x466 CO5300 AMOLED unless the board header overrides it (the 2.8C is 480x480).
+#ifndef SCREEN_W
 #define SCREEN_W            466
 #define SCREEN_H            466
 #define SCREEN_CX           233
 #define SCREEN_CY           233
 #define RADAR_R_OUTER_PX    218            // outer ring radius in pixels
+#endif
 #define LV_COLOR_DEPTH_BITS 16
 // LCD_COL_OFFSET / LCD_ROW_OFFSET / LCD_QSPI_HZ are panel-specific -> board header.
-#define BRIGHTNESS_DEFAULT  200            // 0..255, panel brightness via cmd 0x51
+#define BRIGHTNESS_DEFAULT  200            // 0..255 (AMOLED: panel cmd 0x51; LCD: backlight PWM)
 #define TZ_STR              "CET-1CEST,M3.5.0,M10.5.0/3"  // POSIX TZ (Spain) for local time/date
 #define BRIGHTNESS_IDLE     25             // dimmed after no touch for IDLE_DIM_MS
+#ifndef IDLE_DIM_MS
 #define IDLE_DIM_MS         20000          // dim the screen after this long without a touch
+#endif
+
+// ---------- Radar sweep ----------
+// Shared by radar_view.cpp (LVGL fan on the AMOLEDs + sim) and display.cpp (the 2.8C's
+// post-LVGL sweep compositor).
+#define SWEEP_PERIOD_MS     8000           // one full revolution
+#define SWEEP_FRAME_MS      30             // sweep animation cadence
+#define SWEEP_TRAIL_DEG     38.0f          // fading trail arc behind the lead line
+#define SWEEP_TRAIL_OPA     72             // trail opacity at the lead edge (0..255)
+#define SWEEP_LEAD_OPA      217            // bright leading-edge line opacity
 
 // ---------- ADS-B API (free, non-commercial) ----------
 // Providers are tried in this order; each is paced independently (see AdsbClient).
@@ -71,20 +119,6 @@ static const float RANGE_STEPS_KM[] = {10.0f, 20.0f, 30.0f, 50.0f, 100.0f};
 
 // ---------- Debug ----------
 #define DEBUG_MEM           0               // 1 = print a [mem] heap/fps line every 5s on serial
-
-// ---------- Board ----------
-// The pin map, panel gaps, touch driver and which peripherals exist all live in a
-// per-board header. Select one with a build flag in platformio.ini; the 1.75 is the
-// default so an unflagged build behaves exactly as before.
-//   -DBOARD_AMOLED_143  -> Waveshare ESP32-S3-Touch-AMOLED-1.43
-//   (none)              -> Waveshare ESP32-S3-Touch-AMOLED-1.75  (reference board)
-// Never guess pins for a new board: take them from the vendor demo or the Arduino
-// core board variant, then confirm them on hardware before committing.
-#if defined(BOARD_AMOLED_143)
-#  include "boards/board_amoled_143.h"
-#else
-#  include "boards/board_amoled_175.h"
-#endif
 
 // Safety net: catches a board header that still has placeholder pins in it.
 #if (PIN_LCD_SCLK < 0) || (PIN_I2C_SDA < 0)
