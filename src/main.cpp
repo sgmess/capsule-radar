@@ -32,7 +32,7 @@
 #endif
 #include <set>                       // audio: track which contacts are in range
 #include <string>
-#include <WiFiManager.h>             // captive portal
+#include "wifi_setup.h"              // WiFi provisioning (WiFiManager, or the P4 setup AP)
 #include <Preferences.h>            // NVS (persist theme/settings)
 #include <time.h>                   // NTP/RTC clock + date
 #include <WebServer.h>              // configuration web page
@@ -40,8 +40,6 @@
 #include <ArduinoOTA.h>             // OTA firmware update over WiFi (PlatformIO/espota)
 #include <Update.h>                 // browser OTA: self-flash an uploaded .bin
 #include <esp_heap_caps.h>          // largest-free-block metric (heap health)
-#include <esp_wifi.h>               // WiFi driver control (reset must survive the reboot)
-#include <nvs.h>                    // erase the driver's "nvs.net80211" namespace (WiFi reset)
 
 // ---- shared state ----
 static std::vector<Aircraft> g_aircraft;      // latest snapshot
@@ -49,7 +47,6 @@ static SemaphoreHandle_t     g_ac_mutex;      // guards g_aircraft
 static volatile bool         g_acDirty = false; // set when a new snapshot is ready
 static AdsbClient            g_adsb;
 static RadarSettings         g_settings;
-static WiFiManager           g_wm;
 static int                   g_brightnessDay = BRIGHTNESS_DEFAULT;   // user brightness (web/NVS)
 static int                   g_volume = 60;                          // alert volume 0..100 (web/NVS)
 static bool                  g_muted  = false;                       // mute alert pings
@@ -391,6 +388,15 @@ static void applyBrightness() {
 static WebServer g_web(80);
 
 static void handleRoot() {
+#if !BOARD_HAS_WIFIMANAGER
+    // P4 setup AP: someone who joined CapsuleRadar-Setup and opened the device wants the
+    // WiFi form, not a config page whose settings can't do anything offline yet.
+    if (wifi_setup_portal_active() && WiFi.status() != WL_CONNECTED) {
+        g_web.sendHeader("Location", "/wifisetup");
+        g_web.send(302, "text/plain", "");
+        return;
+    }
+#endif
     const int th = radar::theme();
     const int ranges[] = {10, 15, 25, 30, 50, 100, 150, 250};
     // The value submitted stays in km (the device works in km); only the label is shown in
@@ -654,19 +660,7 @@ static void handleWifi() {
         "<body style='background:#06100a;color:#ffb23c;font-family:sans-serif;padding:24px'>"
         "WiFi reset. Connect to the <b>CapsuleRadar-Setup</b> network to reconfigure.</body>");
     delay(400);                     // let the response reach the browser
-    // The driver stores the saved AP in its own NVS namespace ("nvs.net80211"). On Arduino
-    // core 3.x both wm.resetSettings() and WiFi.disconnect(true,true) can silently no-op
-    // (they fail once the driver is off), so v1.3.19's reset still reconnected. Erasing that
-    // namespace directly is unconditional — it works whatever state the WiFi driver is in.
-    g_wm.resetSettings();           // best-effort driver-level erase first...
-    WiFi.disconnect(false, true);   // ...keep WiFi up so the erase can actually run
-    delay(100);
-    nvs_handle_t h;                 // ...then the guaranteed path: wipe the driver's namespace
-    if (nvs_open("nvs.net80211", NVS_READWRITE, &h) == ESP_OK) {
-        nvs_erase_all(h);
-        nvs_commit(h);
-        nvs_close(h);
-    }
+    wifi_setup_forget();            // saved credentials + the driver's own NVS copy
     delay(300);                     // let NVS finish committing before the reboot
     ESP.restart();
 }
@@ -963,7 +957,7 @@ void setup() {
     delay(200);
     Serial.println("\nCapsule Radar boot  fw " FW_VERSION "  board " BOARD_NAME);
 
-    if (PIN_LCD_SCLK < 0 || PIN_I2C_SDA < 0) {
+    if (PIN_I2C_SDA < 0) {           // (config.h also refuses to build with placeholder pins)
         Serial.println("[!] Pins in config.h are still -1. Copy them from the Waveshare demo.");
     }
     Serial.printf("PSRAM: %u bytes free\n", (unsigned)ESP.getFreePsram());
@@ -1046,27 +1040,13 @@ void setup() {
     // --- WiFi (captive portal, non-blocking) ------------------------------
     // First boot opens the "CapsuleRadar-Setup" AP to enter WiFi creds. Non-blocking
     // so the radar keeps animating while you configure WiFi from your phone.
-    g_wm.setConfigPortalBlocking(false);
-    g_wm.setTitle("Capsule Radar");
-    // light phosphor-green theme for the captive portal (small CSS, injected into <head>)
-    g_wm.setCustomHeadElement(
-        "<style>"
-        "body{background:#06100a;color:#cdd6d1;font-family:system-ui,sans-serif}"
-        "h1,h2,h3{color:#1dff86}"
-        "button,input[type=submit],.btn{background:#1dff86!important;color:#04140b!important;"
-        "border:0!important;border-radius:8px!important;font-weight:700}"
-        "input,select{background:#0c1a12!important;color:#eafff3!important;"
-        "border:1px solid #2a4a39!important;border-radius:8px!important}"
-        "a{color:#1dff86}.q{filter:hue-rotate(90deg)}"
-        "</style>");
-    // After the portal saves new credentials, reboot for a clean start: WiFiManager's
-    // own port-80 server (and mDNS) don't cleanly hand over to our web server / STA
+    // After new credentials are saved, reboot for a clean start: WiFiManager's own
+    // port-80 server (and mDNS) don't cleanly hand over to our web server / STA
     // interface in non-blocking mode, so the config page is flaky until a fresh boot.
-    g_wm.setSaveConfigCallback([]() {
-        Serial.println("[wifi] new credentials saved -> rebooting for a clean web/mDNS start");
-        g_rebootAtMs = millis() + 2500;   // let the portal deliver its 'saved' page first
-    });
-    if (g_wm.autoConnect("CapsuleRadar-Setup")) {
+    if (wifi_setup_begin([]() {
+            Serial.println("[wifi] new credentials saved -> rebooting for a clean web/mDNS start");
+            g_rebootAtMs = millis() + 2500;   // let the portal deliver its 'saved' page first
+        })) {
         Serial.println("[wifi] connected");
     } else {
         Serial.println("[wifi] config portal open - join 'CapsuleRadar-Setup' to set WiFi; UI stays live");
@@ -1085,6 +1065,7 @@ void setup() {
     xTaskCreatePinnedToCore(adsb_task, "adsb", 16384, nullptr, 1, nullptr, 0);  // TLS needs a big stack
 
     // configuration web page (http://capsuleradar.local/)
+    wifi_setup_attach(g_web);        // P4: setup-AP page + captive redirects (no-op elsewhere)
     g_web.on("/", handleRoot);
     g_web.on("/save", HTTP_POST, handleSave);
     g_web.on("/wifi", HTTP_POST, handleWifi);
@@ -1121,7 +1102,7 @@ void setup() {
 
 void loop() {
     display::loop();                // drive LVGL (render dirty areas + run timers)
-    g_wm.process();                 // service the WiFi config portal (non-blocking)
+    wifi_setup_process();           // service the WiFi config portal (non-blocking)
     g_web.handleClient();           // serve the configuration web page
     if (g_useGps) gps_poll();       // pull NMEA from the LC76G (only when GPS auto-location is on)
 
@@ -1137,10 +1118,10 @@ void loop() {
         if (WiFi.status() == WL_CONNECTED) {
             Serial.println("[wifi] saved network appeared -> restarting for a clean start");
             g_rebootAtMs = millis() + 800;
-        } else if (millis() - lastRetry > 20000UL && g_wm.getWiFiIsSaved()) {
+        } else if (millis() - lastRetry > 20000UL && wifi_setup_has_saved()) {
             lastRetry = millis();
             Serial.println("[wifi] retrying saved network in the background...");
-            WiFi.begin();                     // uses the stored credentials
+            wifi_setup_retry();               // uses the stored credentials
         }
     }
 

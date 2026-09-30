@@ -12,8 +12,8 @@ echo "==> Locating tools"
 PY="$HOME/.platformio/penv/bin/python"
 [ -x "$PY" ] || PY=python3
 
-build_one() {   # build_one <pio-env> <output-bin>
-  local env="$1" out="$2" b=".pio/build/$1"
+build_one() {   # build_one <pio-env> <output-bin> [chip] [bootloader-offset] (P4: esp32p4 0x2000)
+  local env="$1" out="$2" chip="${3:-esp32s3}" boot="${4:-0x0}" b=".pio/build/$1"
   echo "==> Building firmware ($env)"
   pio run -e "$env"
   # locate AFTER the build: on a fresh machine the packages dir appears with the first pio run
@@ -26,9 +26,9 @@ build_one() {   # build_one <pio-env> <output-bin>
   fi
   echo "==> Merging bootloader + partitions + app -> $out"
   mkdir -p web/flash
-  "$PY" -m esptool --chip esp32s3 merge_bin -o "$out" \
+  "$PY" -m esptool --chip "$chip" merge_bin -o "$out" \
     --flash_mode dio --flash_freq 80m --flash_size 16MB \
-    0x0     "$b/bootloader.bin" \
+    "$boot" "$b/bootloader.bin" \
     0x8000  "$b/partitions.bin" \
     0xe000  "$boot_app0" \
     0x10000 "$b/firmware.bin"
@@ -39,3 +39,4 @@ build_one esp32-s3-amoled-175 web/flash/CapsuleRadar-esp32s3.bin
 build_one esp32-s3-amoled-143 web/flash/CapsuleRadar-esp32s3-amoled143.bin
 build_one esp32-s3-lcd-28c    web/flash/CapsuleRadar-esp32s3-lcd28c.bin
 build_one esp32-s3-touch-lcd-28c web/flash/CapsuleRadar-esp32s3-touchlcd28c.bin
+build_one esp32-p4-lcd-34c    web/flash/CapsuleRadar-esp32p4-lcd34c.bin esp32p4 0x2000

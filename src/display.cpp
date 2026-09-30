@@ -8,6 +8,8 @@
 //  - BOARD_PANEL_ST7701 (the 2.8C): ST7701 480x480 IPS via esp_lcd's parallel-RGB
 //    peripheral. The panel has no GRAM; the S3 scans a PSRAM framebuffer out
 //    continuously, and a post-LVGL compositor draws the radar sweep (see below).
+//  - BOARD_PANEL_DSI (the ESP32-P4 boards): JD9365 over MIPI-DSI via esp_lcd. The DPI
+//    panel owns its framebuffer; flushes are DMA2D copies into it (panel_dsi.cpp).
 // Everything else (LVGL plumbing, the rotation engine, flush paths) is shared.
 // The actual UI is built by ui_create() (shared with the native SDL sim).
 #include "display.h"
@@ -67,6 +69,8 @@ static inline void rect_grow(Rect &r, int x1, int y1, int x2, int y2) {
     if (x2 > r.x2) r.x2 = x2;
     if (y2 > r.y2) r.y2 = y2;
 }
+#elif BOARD_PANEL_DSI
+#include "panel_dsi.h"
 #else
 #include <Arduino_GFX_Library.h>
 // --- Arduino_GFX panel -------------------------------------------------------
@@ -123,6 +127,8 @@ static void draw_block(int16_t x, int16_t y, lv_color_t *pixels, uint16_t w, uin
         memcpy(dst, src + row * w, (size_t)w * sizeof(uint16_t));
     rect_grow(s_pend[0], x, y, x + w - 1, y + h - 1);
     rect_grow(s_pend[1], x, y, x + w - 1, y + h - 1);
+#elif BOARD_PANEL_DSI
+    panel_dsi_draw(x, y, x + w, y + h, pixels);   // end exclusive; waits for the DMA2D copy
 #elif (LV_COLOR_16_SWAP != 0)
     s_gfx->draw16bitBeRGBBitmap(x, y, (uint16_t *)pixels, w, h);
 #else
@@ -138,6 +144,8 @@ static void panel_fill_black() {
     if (s_clean) memset(s_clean, 0, (size_t)SCREEN_W * SCREEN_H * sizeof(uint16_t));
     s_pend[0] = s_pend[1] = { 0, 0, SCREEN_W - 1, SCREEN_H - 1, true };
     s_lastWedge[0].valid = s_lastWedge[1].valid = false;
+#elif BOARD_PANEL_DSI
+    panel_dsi_fill_black();
 #else
     if (s_gfx) s_gfx->fillScreen(RGB565_BLACK);
 #endif
@@ -442,7 +450,7 @@ static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *px) 
     lv_disp_flush_ready(drv);
 }
 
-#if !BOARD_PANEL_ST7701
+#if !BOARD_PANEL_ST7701 && !BOARD_PANEL_DSI
 // CO5300 (QSPI) requires 2-pixel-aligned flush windows: even start, odd end.
 // Without this, partial-area updates (e.g. the radar sweep) tear / ghost / flicker.
 static void rounder_cb(lv_disp_drv_t *drv, lv_area_t *area) {
@@ -523,6 +531,14 @@ bool begin() {
     panel_fill_black();                           // fresh PSRAM framebuffers scan out garbage otherwise
     ledcAttach(PIN_LCD_BL, 20000 /*Hz*/, 10 /*bit*/);   // backlight PWM (demo values)
     setBrightness(BRIGHTNESS_DEFAULT);
+#elif BOARD_PANEL_DSI
+    Serial.println("[display] init JD9365 MIPI-DSI...");
+    if (!panel_dsi_init()) {
+        Serial.println("[display] panel_dsi_init() FAILED");
+        return false;
+    }
+    panel_fill_black();                           // the fresh PSRAM framebuffer holds garbage
+    setBrightness(BRIGHTNESS_DEFAULT);
 #else
     Serial.println("[display] init CO5300 QSPI...");
     s_bus = new Arduino_ESP32QSPI(PIN_LCD_CS, PIN_LCD_SCLK,
@@ -567,7 +583,7 @@ bool begin() {
     s_disp_drv.hor_res  = SCREEN_W;
     s_disp_drv.ver_res  = SCREEN_H;
     s_disp_drv.flush_cb = flush_cb;
-#if !BOARD_PANEL_ST7701
+#if !BOARD_PANEL_ST7701 && !BOARD_PANEL_DSI
     s_disp_drv.rounder_cb = rounder_cb;     // CO5300 needs 2-px-aligned windows
 #endif
     s_disp_drv.draw_buf = &s_draw_buf;
@@ -610,6 +626,12 @@ void sweepConfig(uint16_t ring565, uint16_t lead565, bool enabled) {
 }
 void sweepSetVisible(bool onRadarView) { s_swVisible = onRadarView; }
 bool sweepCompositor() { return s_clean && s_angMap && s_fb[1]; }
+#elif BOARD_PANEL_DSI
+void setBrightness(uint8_t v) { panel_dsi_backlight(v); }
+
+void sweepConfig(uint16_t, uint16_t, bool) {}
+void sweepSetVisible(bool) {}
+bool sweepCompositor() { return false; }
 #else
 void setBrightness(uint8_t v) { if (s_gfx) s_gfx->setBrightness(v); }
 

@@ -46,6 +46,7 @@ jobs:
           pio run -e esp32-s3-amoled-143
           pio run -e esp32-s3-lcd-28c
           pio run -e esp32-s3-touch-lcd-28c
+          pio run -e esp32-p4-lcd-34c
 
       - name: Host tests
         run: ./tests/run_host_tests.sh
@@ -54,14 +55,14 @@ jobs:
         run: |
           BOOT_APP0="$(find "$HOME/.platformio/packages" -name boot_app0.bin -path '*framework-arduinoespressif32*' | head -1)"
           mkdir -p site
-          cp web/flash/index.html web/flash/manifest.json web/flash/manifest-amoled143.json web/flash/manifest-lcd28c.json web/flash/manifest-touchlcd28c.json site/
+          cp web/flash/index.html web/flash/manifest.json web/flash/manifest-amoled143.json web/flash/manifest-lcd28c.json web/flash/manifest-touchlcd28c.json web/flash/manifest-lcd34c.json site/
           # stamp the flasher page + manifests with the firmware version being built
           VER=$(grep -oE 'FW_VERSION "[0-9.]+"' src/config.h | grep -oE '[0-9.]+' | head -1)
-          sed -i "s/__FWVER__/${VER:-dev}/g" site/index.html site/manifest.json site/manifest-amoled143.json site/manifest-lcd28c.json site/manifest-touchlcd28c.json
-          merge() {   # merge <pio-env> <output-bin>
-            python -m esptool --chip esp32s3 merge_bin -o "$2" \
+          sed -i "s/__FWVER__/${VER:-dev}/g" site/index.html site/manifest.json site/manifest-amoled143.json site/manifest-lcd28c.json site/manifest-touchlcd28c.json site/manifest-lcd34c.json
+          merge() {   # merge <pio-env> <output-bin> [chip] [bootloader-offset] (P4: esp32p4 0x2000)
+            python -m esptool --chip "${3:-esp32s3}" merge_bin -o "$2" \
               --flash_mode dio --flash_freq 80m --flash_size 16MB \
-              0x0     ".pio/build/$1/bootloader.bin" \
+              "${4:-0x0}" ".pio/build/$1/bootloader.bin" \
               0x8000  ".pio/build/$1/partitions.bin" \
               0xe000  "$BOOT_APP0" \
               0x10000 ".pio/build/$1/firmware.bin"
@@ -70,6 +71,7 @@ jobs:
           merge esp32-s3-amoled-143 site/CapsuleRadar-esp32s3-amoled143.bin
           merge esp32-s3-lcd-28c    site/CapsuleRadar-esp32s3-lcd28c.bin
           merge esp32-s3-touch-lcd-28c site/CapsuleRadar-esp32s3-touchlcd28c.bin
+          merge esp32-p4-lcd-34c    site/CapsuleRadar-esp32p4-lcd34c.bin esp32p4 0x2000
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,13 @@
+{
+  "name": "Capsule Radar (P4 LCD 3.4C)",
+  "version": "__FWVER__",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-P4",
+      "parts": [
+        { "path": "CapsuleRadar-esp32p4-lcd34c.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

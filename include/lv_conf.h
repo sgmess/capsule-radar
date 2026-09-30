@@ -95,6 +95,12 @@
 #define LV_FONT_MONTSERRAT_18 1   /* large-text mode: 14 -> 18 */
 #define LV_FONT_MONTSERRAT_20 1   /* large-text mode: 16 -> 20 */
 #define LV_FONT_MONTSERRAT_28 1
+/* The 800 px P4 panel steps every font up a tier (src/ui_scale.h); only it pays the flash. */
+#if defined(BOARD_P4_LCD_34C)
+#define LV_FONT_MONTSERRAT_24 1
+#define LV_FONT_MONTSERRAT_32 1
+#define LV_FONT_MONTSERRAT_48 1
+#endif
 #define LV_FONT_DEFAULT &lv_font_montserrat_14
 
 /*==================

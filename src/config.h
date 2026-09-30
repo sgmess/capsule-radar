@@ -10,12 +10,15 @@
 //   -DBOARD_AMOLED_143  -> Waveshare ESP32-S3-Touch-AMOLED-1.43
 //   -DBOARD_LCD_28C     -> Waveshare ESP32-S3-LCD-2.8C (non-touch, ST7701 RGB)
 //   -DBOARD_TOUCH_LCD_28C -> Waveshare ESP32-S3-Touch-LCD-2.8C (same + GT911 touch)
+//   -DBOARD_P4_LCD_34C  -> Waveshare ESP32-P4-WIFI6-Touch-LCD-3.4C (ESP32-P4, MIPI-DSI)
 //   (none)              -> Waveshare ESP32-S3-Touch-AMOLED-1.75  (reference board)
 // Never guess pins for a new board: take them from the vendor demo or the Arduino
 // core board variant, then confirm them on hardware before committing.
 // Included first so a board can override the screen defaults below.
 #if defined(BOARD_AMOLED_143)
 #  include "boards/board_amoled_143.h"
+#elif defined(BOARD_P4_LCD_34C)
+#  include "boards/board_p4_lcd_34c.h"
 #elif defined(BOARD_TOUCH_LCD_28C)
 #  include "boards/board_touch_lcd_28c.h"
 #elif defined(BOARD_LCD_28C)
@@ -26,6 +29,21 @@
 // Defaults for capabilities the AMOLED headers predate.
 #ifndef BOARD_PANEL_ST7701
 #define BOARD_PANEL_ST7701  0              // 0 = CO5300 QSPI AMOLED via Arduino_GFX
+#endif
+#ifndef BOARD_PANEL_DSI
+#define BOARD_PANEL_DSI     0              // 1 = MIPI-DSI panel via esp_lcd (the P4 boards)
+#endif
+#ifndef BOARD_HAS_WIFIMANAGER
+#define BOARD_HAS_WIFIMANAGER 1            // 0 = no native PHY (P4): wifi_setup.cpp's AP instead
+#endif
+#ifndef UI_SCALE_PERMILLE
+#define UI_SCALE_PERMILLE   1000           // UI_S() factor for hand-placed UI geometry (466 design)
+#endif
+#ifndef UI_BIG_PANEL
+#define UI_BIG_PANEL        0              // 1 = step fonts up a tier on big panels
+#endif
+#ifndef I2C_CLOCK_HZ
+#define I2C_CLOCK_HZ        400000
 #endif
 #ifndef BOARD_HAS_TOUCH
 #define BOARD_HAS_TOUCH     1

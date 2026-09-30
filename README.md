@@ -53,6 +53,8 @@ The Waveshare **ESP32-S3-Touch-AMOLED-1.43** is also supported in-tree. Same SoC
 
 The Waveshare **ESP32-S3-Touch-LCD-2.8C** and its non-touch sibling **ESP32-S3-LCD-2.8C** are supported in-tree too, thanks to [@ijord's port](https://github.com/ijord/capsule-radar). Both have a 480×480 **ST7701** IPS on a parallel RGB bus; alerts use the buzzer and battery is read from an ADC divider. The Touch board uses its **GT911** touch like the AMOLEDs. On the non-touch board the **BOOT button** navigates: click for the next view, long-press for the next range.
 
+The Waveshare **ESP32-P4-WIFI6-Touch-LCD-3.4C** (3.4″ round, 800×800) is in-tree too, on a different chip: an **ESP32-P4** with a MIPI-DSI panel and Wi-Fi from an on-board ESP32-C6. It is **running on hardware** (radar, touch, Wi-Fi and live data confirmed; audio not yet enabled). There is no WiFiManager on the P4: on first boot join `CapsuleRadar-Setup` and enter your WiFi, or type `wifi <ssid> <password>` in the serial monitor. It logs over its native USB port (the one you flash through). See [HARDWARE.md](docs/HARDWARE.md) for what to check on first boot.
+
 | | 1.75 (reference) | 1.43 | 2.8C (Touch / non-touch) |
 |---|---|---|---|
 | PlatformIO env | `esp32-s3-amoled-175` | `esp32-s3-amoled-143` | `esp32-s3-touch-lcd-28c` / `esp32-s3-lcd-28c` |
@@ -89,6 +91,7 @@ pio run -e esp32-s3-amoled-175 -t upload     # build + flash over USB-C (1.75)
 pio run -e esp32-s3-amoled-143 -t upload     # ...or the 1.43
 pio run -e esp32-s3-touch-lcd-28c -t upload  # ...or the Touch-LCD-2.8C (first build is slow: it rebuilds the core)
 pio run -e esp32-s3-lcd-28c -t upload        # ...or the non-touch LCD-2.8C
+pio run -e esp32-p4-lcd-34c -t upload        # ...or the ESP32-P4 3.4C
 pio device monitor -b 115200                  # serial log
 ```
 The boot log names the board it was built for (`Capsule Radar boot  fw … board …`) — worth checking first if the screen stays black, since the wrong board's image drives the wrong pins.

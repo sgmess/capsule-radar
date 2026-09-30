@@ -1,18 +1,23 @@
-// GT911 capacitive touch over I2C (Arduino) — Waveshare ESP32-S3-Touch-LCD-2.8C.
+// GT911-family capacitive touch over I2C (Arduino) — Waveshare ESP32-S3-Touch-LCD-2.8C
+// and the ESP32-P4-WIFI6-Touch-LCD-XC boards.
 // Protocol per the Waveshare factory demo (Touch_GT911.cpp): 16-bit register addresses,
 // status byte at 0x814E (bit7 = buffer ready, low nibble = point count), 8-byte point
 // records from 0x814F, and the status byte must be written back to 0 after every read
 // or the chip stops reporting. Single-touch is all the radar UI needs.
 //
-// Polled from the LVGL indev (no interrupt): the INT pin is only used as the address
-// strap during reset. Reset is on the TCA9554 expander, so tca9554_begin() (called by
-// display::begin() for the panel) must already have run — it has, touch_begin() comes
-// after the panel in display::begin().
+// Polled from the LVGL indev (no interrupt). Where the board wires the reset (the 2.8C:
+// on the TCA9554 expander, EXIO_TP_RST), the INT pin straps the address during reset;
+// tca9554_begin() has already run by then because display::begin() brings the panel up
+// before touch_begin(). Where reset/INT are not connected (the P4 XC boards), there is
+// no strap, so both Goodix addresses are probed. Any Goodix "9xxx" product id is
+// accepted: Skyglass found a GT9271 behind the "GT911" label on the P4 4C.
 #include "touch.h"
 #include "config.h"
 
 #if TOUCH_DRIVER_GT911
+#ifdef EXIO_TP_RST
 #include "tca9554.h"
+#endif
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -27,19 +32,20 @@
 static bool     s_down = false;
 static uint16_t s_x = 0, s_y = 0;
 static uint32_t s_lastReportMs = 0;
+static uint8_t  s_addr = I2C_ADDR_TOUCH;
 
 static bool gt_read(uint16_t reg, uint8_t *data, uint8_t len) {
-    Wire.beginTransmission((uint8_t)I2C_ADDR_TOUCH);
+    Wire.beginTransmission(s_addr);
     Wire.write((uint8_t)(reg >> 8));
     Wire.write((uint8_t)reg);
     if (Wire.endTransmission(true) != 0) return false;
-    if (Wire.requestFrom((uint8_t)I2C_ADDR_TOUCH, len) < len) return false;
+    if (Wire.requestFrom(s_addr, len) < len) return false;
     for (uint8_t i = 0; i < len; ++i) data[i] = Wire.read();
     return true;
 }
 
 static void gt_clear_status() {
-    Wire.beginTransmission((uint8_t)I2C_ADDR_TOUCH);
+    Wire.beginTransmission(s_addr);
     Wire.write((uint8_t)(GT_REG_STATUS >> 8));
     Wire.write((uint8_t)GT_REG_STATUS);
     Wire.write((uint8_t)0);
@@ -47,8 +53,9 @@ static void gt_clear_status() {
 }
 
 bool touch_begin() {
-    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 400000);   // idempotent (the expander began it)
+    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_CLOCK_HZ);   // idempotent: the first begin sets the clock
 
+#ifdef EXIO_TP_RST
     // Reset with INT held low -> I2C address 0x5D (vendor sequence and timings).
     pinMode(PIN_TP_INT, OUTPUT);
     digitalWrite(PIN_TP_INT, LOW);
@@ -58,14 +65,25 @@ bool touch_begin() {
     delay(200);
     digitalWrite(PIN_TP_INT, HIGH);
     pinMode(PIN_TP_INT, INPUT);
+#endif
 
+#ifdef I2C_ADDR_TOUCH_ALT
+    const uint8_t addrs[2] = { I2C_ADDR_TOUCH, I2C_ADDR_TOUCH_ALT };   // no strap: try both
+#else
+    const uint8_t addrs[1] = { I2C_ADDR_TOUCH };
+#endif
     uint8_t id[4] = {0};
-    if (gt_read(GT_REG_PRODUCT_ID, id, 3)) {
-        Serial.printf("[touch] GT911 responding (product id \"%c%c%c\")\n", id[0], id[1], id[2]);
-    } else {
-        // Not fatal: touch_read() keeps polling, and the UI still works without touch.
-        Serial.println("[touch] GT911 not responding at 0x5D (will keep polling)");
+    for (uint8_t a : addrs) {
+        s_addr = a;
+        if (gt_read(GT_REG_PRODUCT_ID, id, 4) && id[0] == '9') {
+            Serial.printf("[touch] Goodix GT%c%c%c%c at 0x%02X\n", id[0], id[1], id[2],
+                          id[3] ? id[3] : ' ', a);
+            return true;
+        }
     }
+    // Not fatal: touch_read() keeps polling the default address, and the UI still works.
+    s_addr = I2C_ADDR_TOUCH;
+    Serial.printf("[touch] no Goodix controller answered (will keep polling 0x%02X)\n", s_addr);
     return true;
 }
 

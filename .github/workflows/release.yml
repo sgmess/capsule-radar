@@ -31,8 +31,10 @@ jobs:
       - name: Build and merge every board
         run: |
           set -euo pipefail
-          build() {   # build <pio-env> <filename-suffix>
-            local env="$1" sfx="$2" b=".pio/build/$1"
+          # chip + bootloader offset default to the S3; the ESP32-P4 boots its bootloader
+          # from 0x2000 (framework-arduinoespressif32 tools/pioarduino-build.py).
+          build() {   # build <pio-env> <filename-suffix> [chip] [bootloader-offset]
+            local env="$1" sfx="$2" chip="${3:-esp32s3}" boot="${4:-0x0}" b=".pio/build/$1"
             pio run -e "$env"
             # Look for boot_app0.bin AFTER the build, not before: on a clean runner
             # ~/.platformio/packages does not exist until the first `pio run` installs the
@@ -45,9 +47,9 @@ jobs:
               find "$HOME/.platformio/packages" -name '*.bin' 2>/dev/null | head -20
               return 1
             fi
-            python -m esptool --chip esp32s3 merge_bin -o "CapsuleRadar-esp32s3$sfx.bin" \
+            python -m esptool --chip "$chip" merge_bin -o "CapsuleRadar-$chip$sfx.bin" \
               --flash_mode dio --flash_freq 80m --flash_size 16MB \
-              0x0     "$b/bootloader.bin" \
+              "$boot" "$b/bootloader.bin" \
               0x8000  "$b/partitions.bin" \
               0xe000  "$boot_app0" \
               0x10000 "$b/firmware.bin"
@@ -57,6 +59,7 @@ jobs:
           build esp32-s3-amoled-143 "-amoled143"
           build esp32-s3-lcd-28c    "-lcd28c"
           build esp32-s3-touch-lcd-28c "-touchlcd28c"
+          build esp32-p4-lcd-34c    "-lcd34c" esp32p4 0x2000
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -70,6 +73,8 @@ jobs:
             CapsuleRadar-ota-lcd28c.bin
             CapsuleRadar-esp32s3-touchlcd28c.bin
             CapsuleRadar-ota-touchlcd28c.bin
+            CapsuleRadar-esp32p4-lcd34c.bin
+            CapsuleRadar-ota-lcd34c.bin
           generate_release_notes: true
           body: |
             **First flash (USB):** `CapsuleRadar-esp32s3.bin` — the full merged image (offset `0x0`).
@@ -84,6 +89,9 @@ jobs:
             Files with `amoled143` in the name are for the **ESP32-S3-Touch-AMOLED-1.43**.
             Files with `touchlcd28c` in the name are for the **ESP32-S3-Touch-LCD-2.8C**;
             files with just `lcd28c` are for the non-touch **ESP32-S3-LCD-2.8C**.
+            Files with `lcd34c` (`CapsuleRadar-esp32p4-lcd34c.bin`) are for the
+            **ESP32-P4-WIFI6-Touch-LCD-3.4C** (a different chip: flash it with
+            `esptool.py --chip esp32p4`).
             The two boards have completely different pin maps — the wrong image gives a
             black screen, so check your board before flashing. (The browser flasher
             currently installs the 1.75 build only.)

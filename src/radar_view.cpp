@@ -5,6 +5,7 @@
 //                    aircraft as yellow balls (emitting waves) + off-range arrows.
 #include "radar_view.h"
 #include "config.h"
+#include "ui_scale.h"   // UI_S()/UI_F<n>: glyphs and labels scale with bigger panels
 #include "geo.h"
 #include "coastline.h"
 #include "airports.h"
@@ -60,14 +61,14 @@
 
 // ---- aircraft / flow / orb config ----
 #define TRAIL_MAX         7
-#define TAP_RADIUS_PX     40    // generous finger-tap catch radius (picks the nearest glyph within it)
+#define TAP_RADIUS_PX     UI_S(40)    // generous finger-tap catch radius (picks the nearest glyph within it)
 #define FLOW_MAX          700
 #define FLOW_REDRAW_EVERY 80
 #define FLOW_OPA          55
 #define ORB_BLIPS      7
 #define ORB_ARROWS     8
-#define BALL_R            9
-#define WAVE_EXPAND       28.0f
+#define BALL_R            UI_S(9)
+#define WAVE_EXPAND       (28.0f * UI_SCALE_PERMILLE / 1000.0f)
 
 static int        s_theme    = THEME_PHOSPHOR;
 static void      (*s_themeCb)(int) = nullptr;
@@ -129,6 +130,7 @@ static std::map<std::string, std::vector<lv_point_t>> s_trails;
 
 static const float GX[4] = { 0.0f,  7.0f, 0.0f, -7.0f };
 static const float GY[4] = { -11.0f, 5.0f, 8.0f, 5.0f };
+static const float GK = UI_SCALE_PERMILLE / 1000.0f;   // glyph scale (1.0 on the 466 panels)
 
 static inline bool orb() { return s_theme == THEME_ORB; }
 
@@ -313,8 +315,8 @@ static void wedge_bbox(float deg, lv_area_t *out) {
 // Must cover the label areas drawn in the aircraft layer (they grew for large-text mode).
 static inline lv_area_t glyph_bbox(lv_point_t p) {
     lv_area_t a;
-    if (orb()) { a.x1 = p.x - 30; a.y1 = p.y - 30; a.x2 = p.x + 30;  a.y2 = p.y + 30; }
-    else          { a.x1 = p.x - 22; a.y1 = p.y - 22; a.x2 = p.x + 174; a.y2 = p.y + 32; }
+    if (orb()) { a.x1 = p.x - UI_S(30); a.y1 = p.y - UI_S(30); a.x2 = p.x + UI_S(30);  a.y2 = p.y + UI_S(30); }
+    else          { a.x1 = p.x - UI_S(22); a.y1 = p.y - UI_S(22); a.x2 = p.x + UI_S(174); a.y2 = p.y + UI_S(32); }
     return a;
 }
 static inline void area_union(lv_area_t &d, const lv_area_t &s) {
@@ -358,8 +360,8 @@ static void sweep_timer_cb(lv_timer_t *t) {
             if (!ac.inRange) continue;
             if (balls >= ORB_BLIPS) break;
             balls++;
-            lv_area_t a = { (lv_coord_t)(ac.pos.x - 44), (lv_coord_t)(ac.pos.y - 44),
-                            (lv_coord_t)(ac.pos.x + 44), (lv_coord_t)(ac.pos.y + 44) };
+            lv_area_t a = { (lv_coord_t)(ac.pos.x - UI_S(44)), (lv_coord_t)(ac.pos.y - UI_S(44)),
+                            (lv_coord_t)(ac.pos.x + UI_S(44)), (lv_coord_t)(ac.pos.y + UI_S(44)) };
             lv_obj_invalidate_area(s_acLayer, &a);
         }
         return;
@@ -429,8 +431,8 @@ static void draw_ball(lv_draw_ctx_t *d, const AcDraw &ac) {
     hl.bg_color = lv_color_hex(0xFFFBCC);
     hl.bg_opa = 170;
     hl.radius = LV_RADIUS_CIRCLE;
-    lv_area_t hr = { (lv_coord_t)(ac.pos.x - 5), (lv_coord_t)(ac.pos.y - 6),
-                     (lv_coord_t)(ac.pos.x - 1), (lv_coord_t)(ac.pos.y - 2) };
+    lv_area_t hr = { (lv_coord_t)(ac.pos.x - UI_S(5)), (lv_coord_t)(ac.pos.y - UI_S(6)),
+                     (lv_coord_t)(ac.pos.x - UI_S(1)), (lv_coord_t)(ac.pos.y - UI_S(2)) };
     lv_draw_rect(d, &hl, &hr);
 }
 
@@ -441,16 +443,16 @@ static void draw_offrange(lv_draw_ctx_t *d, const AcDraw &ac) {
     b.bg_color = ac.emergency ? ORB_EMERG : ORB_BLIP;
     b.bg_opa = LV_OPA_COVER;
     b.radius = LV_RADIUS_CIRCLE;
-    lv_area_t r = { (lv_coord_t)(ac.pos.x - 5), (lv_coord_t)(ac.pos.y - 5),
-                    (lv_coord_t)(ac.pos.x + 5), (lv_coord_t)(ac.pos.y + 5) };
+    lv_area_t r = { (lv_coord_t)(ac.pos.x - UI_S(5)), (lv_coord_t)(ac.pos.y - UI_S(5)),
+                    (lv_coord_t)(ac.pos.x + UI_S(5)), (lv_coord_t)(ac.pos.y + UI_S(5)) };
     lv_draw_rect(d, &b, &r);
 
     // small orange triangle just outside it, pointing toward the aircraft's bearing
-    const lv_coord_t ox = (lv_coord_t)lroundf(ac.pos.x + 12.0f * sinf(ac.bearingDeg * (float)M_PI / 180.0f));
-    const lv_coord_t oy = (lv_coord_t)lroundf(ac.pos.y - 12.0f * cosf(ac.bearingDeg * (float)M_PI / 180.0f));
-    lv_point_t tri[3] = { rot_pt(0, -7, ac.bearingDeg, ox, oy),
-                          rot_pt(5, 4, ac.bearingDeg, ox, oy),
-                          rot_pt(-5, 4, ac.bearingDeg, ox, oy) };
+    const lv_coord_t ox = (lv_coord_t)lroundf(ac.pos.x + UI_S(12) * sinf(ac.bearingDeg * (float)M_PI / 180.0f));
+    const lv_coord_t oy = (lv_coord_t)lroundf(ac.pos.y - UI_S(12) * cosf(ac.bearingDeg * (float)M_PI / 180.0f));
+    lv_point_t tri[3] = { rot_pt(0, UI_S(-7), ac.bearingDeg, ox, oy),
+                          rot_pt(UI_S(5), UI_S(4), ac.bearingDeg, ox, oy),
+                          rot_pt(UI_S(-5), UI_S(4), ac.bearingDeg, ox, oy) };
     lv_draw_rect_dsc_t td;
     lv_draw_rect_dsc_init(&td);
     td.bg_color = ORB_ACCENT;
@@ -482,8 +484,9 @@ static void ac_draw_cb(lv_event_t *e) {
             const float c = cosf(th), s = sinf(th);
             lv_point_t pts[4];
             for (int i = 0; i < 4; ++i) {
-                const float x = GX[i] * c - GY[i] * s;
-                const float y = GX[i] * s + GY[i] * c;
+                const float gx = GX[i] * GK, gy = GY[i] * GK;
+                const float x = gx * c - gy * s;
+                const float y = gx * s + gy * c;
                 pts[i].x = (lv_coord_t)(ac.pos.x + (lv_coord_t)lroundf(x));
                 pts[i].y = (lv_coord_t)(ac.pos.y + (lv_coord_t)lroundf(y));
             }
@@ -496,7 +499,7 @@ static void ac_draw_cb(lv_event_t *e) {
                 lv_draw_arc_dsc_t h;
                 lv_draw_arc_dsc_init(&h);
                 h.color = COL_EMERG; h.width = 3; h.opa = 255;
-                lv_draw_arc(d, &h, &ac.pos, 16, 0, 360);
+                lv_draw_arc(d, &h, &ac.pos, UI_S(16), 0, 360);
             }
         }
 
@@ -508,11 +511,11 @@ static void ac_draw_cb(lv_event_t *e) {
             sr.opa = 240;
             if (drg) {
                 sr.color = ORB_ACCENT;
-                lv_draw_arc(d, &sr, &ac.pos, 15, 0, 360);
-                lv_draw_arc(d, &sr, &ac.pos, 23, 0, 360);
+                lv_draw_arc(d, &sr, &ac.pos, UI_S(15), 0, 360);
+                lv_draw_arc(d, &sr, &ac.pos, UI_S(23), 0, 360);
             } else {
                 sr.color = ac.emergency ? COL_EMERG : s_cInk;
-                lv_draw_arc(d, &sr, &ac.pos, 19, 0, 360);
+                lv_draw_arc(d, &sr, &ac.pos, UI_S(19), 0, 360);
             }
         }
 
@@ -520,16 +523,16 @@ static void ac_draw_cb(lv_event_t *e) {
         if (!drg) {
             lv_draw_label_dsc_t lc;
             lv_draw_label_dsc_init(&lc);
-            lc.font = s_bigText ? &lv_font_montserrat_18 : &lv_font_montserrat_14;
+            lc.font = s_bigText ? UI_F18 : UI_F14;
             lc.color = s_cInk;
-            lv_area_t a1 = { (lv_coord_t)(ac.pos.x + 12), (lv_coord_t)(ac.pos.y - 14),
-                             (lv_coord_t)(ac.pos.x + 168), (lv_coord_t)(ac.pos.y + 4) };
+            lv_area_t a1 = { (lv_coord_t)(ac.pos.x + UI_S(12)), (lv_coord_t)(ac.pos.y - UI_S(14)),
+                             (lv_coord_t)(ac.pos.x + UI_S(168)), (lv_coord_t)(ac.pos.y + UI_S(4)) };
             if (ac.call[0]) lv_draw_label(d, &lc, &a1, ac.call, NULL);
             lv_draw_label_dsc_t la;
             lv_draw_label_dsc_init(&la);
-            la.font = s_bigText ? &lv_font_montserrat_16 : &lv_font_montserrat_12;
+            la.font = s_bigText ? UI_F16 : UI_F12;
             la.color = ac.color;
-            lv_area_t a2 = { a1.x1, (lv_coord_t)(ac.pos.y + 4), a1.x2, (lv_coord_t)(ac.pos.y + 26) };
+            lv_area_t a2 = { a1.x1, (lv_coord_t)(ac.pos.y + UI_S(4)), a1.x2, (lv_coord_t)(ac.pos.y + UI_S(26)) };
             if (ac.altTxt[0]) lv_draw_label(d, &la, &a2, ac.altTxt, NULL);
         }
     }
@@ -558,7 +561,7 @@ static lv_obj_t *make_layer(lv_obj_t *parent, lv_event_cb_t draw_cb) {
 
 static void pulse_anim_cb(void *obj, int32_t v) {
     lv_obj_t *o = (lv_obj_t *)obj;
-    const lv_coord_t dia = 10 + (lv_coord_t)((v * 44) / 100);
+    const lv_coord_t dia = UI_S(10) + (lv_coord_t)((v * UI_S(44)) / 100);
     lv_obj_set_size(o, dia, dia);
     lv_obj_center(o);
     lv_obj_set_style_border_opa(o, (lv_opa_t)(220 - v * 220 / 100), 0);
@@ -689,19 +692,19 @@ void init(void *lv_parent) {
     s_sweep     = make_layer(parent, sweep_draw_cb);
     s_acLayer   = make_layer(parent, ac_draw_cb);
 
-    s_rose[0] = make_label(parent, "N", &lv_font_montserrat_28, COL_INK,  LV_ALIGN_TOP_MID,    0, 12);
-    s_rose[1] = make_label(parent, "S", &lv_font_montserrat_16, COL_SOFT, LV_ALIGN_BOTTOM_MID, 0, -12);
-    s_rose[2] = make_label(parent, "E", &lv_font_montserrat_16, COL_SOFT, LV_ALIGN_RIGHT_MID, -12, 0);
-    s_rose[3] = make_label(parent, "W", &lv_font_montserrat_16, COL_SOFT, LV_ALIGN_LEFT_MID,   12, 0);
+    s_rose[0] = make_label(parent, "N", UI_F28, COL_INK,  LV_ALIGN_TOP_MID,    0, UI_S(12));
+    s_rose[1] = make_label(parent, "S", UI_F16, COL_SOFT, LV_ALIGN_BOTTOM_MID, 0, UI_S(-12));
+    s_rose[2] = make_label(parent, "E", UI_F16, COL_SOFT, LV_ALIGN_RIGHT_MID, UI_S(-12), 0);
+    s_rose[3] = make_label(parent, "W", UI_F16, COL_SOFT, LV_ALIGN_LEFT_MID,   UI_S(12), 0);
 
     char rng[16];
     snprintf(rng, sizeof(rng), "%.0f km", (double)RANGE_KM_DEFAULT);
-    s_rangeLbl = make_label(parent, rng, &lv_font_montserrat_14, COL_GREEN, LV_ALIGN_CENTER, 92, -8);
+    s_rangeLbl = make_label(parent, rng, UI_F14, COL_GREEN, LV_ALIGN_CENTER, UI_S(92), UI_S(-8));
     lv_obj_set_style_text_opa(s_rangeLbl, 128, 0);
 
     s_pulse = lv_obj_create(parent);
     lv_obj_remove_style_all(s_pulse);
-    lv_obj_set_size(s_pulse, 12, 12);
+    lv_obj_set_size(s_pulse, UI_S(12), UI_S(12));
     lv_obj_center(s_pulse);
     lv_obj_set_style_radius(s_pulse, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(s_pulse, LV_OPA_TRANSP, 0);
@@ -719,7 +722,7 @@ void init(void *lv_parent) {
 
     s_centerDot = lv_obj_create(parent);
     lv_obj_remove_style_all(s_centerDot);
-    lv_obj_set_size(s_centerDot, 7, 7);
+    lv_obj_set_size(s_centerDot, UI_S(7), UI_S(7));
     lv_obj_center(s_centerDot);
     lv_obj_set_style_radius(s_centerDot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(s_centerDot, COL_INK, 0);

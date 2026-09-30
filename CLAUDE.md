@@ -37,6 +37,21 @@ panics on flash writes); the sweep is composited outside LVGL (`compose_step()` 
 so the radar sweep code in radar_view.cpp is skipped there; internal RAM is tight (bounce
 buffers + TLS), so its LVGL draw buffer is 12 lines and the LVGL pool lives in PSRAM.
 
+### Fourth board: ESP32-P4-WIFI6-Touch-LCD-3.4C (running on HW; audio still off)
+A different SoC: **ESP32-P4** (RISC-V), 800x800 round **JD9365 over 2-lane MIPI-DSI**
+(`panel_dsi.cpp` replicates `esp_lcd_jd9365`; the 197-command init table in
+`panel_dsi_init_34c.h` is generated from Waveshare's BSP — never hand-edit it, the 4C's differs),
+GT911-family touch with no reset/INT lines, and **no radio of its own** (ESP32-C6 over SDIO,
+`esp_hosted`; plain `WiFi.h` works). WiFiManager cannot build there, so `wifi_setup.cpp` has a
+setup-AP + serial `wifi <ssid> <pass>` path (`BOARD_HAS_WIFIMANAGER 0`). The UI is scaled from
+the 466 design via `UI_S()`/`UI_F<n>` in `src/ui_scale.h` (identity on every S3 board — keep
+it that way). P4 images put the bootloader at 0x2000 and merge with `--chip esp32p4`.
+Gotcha: silicon revision picks the platform. The env targets v3.x (bring-up board: v3.2) with
+pioarduino 55.03.312 / core 3.3.12 (IDF 5.5 libs, v3.01–v3.99); v0.x–v1.x chips need 53.03.13's
+IDF 5.3 libs. On v3 the DSI PHY clock source must be 0 (the named DEFAULT is a legacy clock v3
+lacks -> abort). Logs go to the P4's native USB (CDC_ON_BOOT=1), not the CH343.
+`-e esp32-p4-lcd-34c`. Detail in `docs/HARDWARE.md`.
+
 ## Stack decision
 **PlatformIO + Arduino framework.** Libraries:
 - `moononournation/GFX Library for Arduino` (Arduino_GFX) — CO5300 QSPI panel driver + framebuffer.
@@ -100,6 +115,7 @@ pio run -e esp32-s3-amoled-175              # build (reference board)
 pio run -e esp32-s3-amoled-143              # build (1.43)
 pio run -e esp32-s3-touch-lcd-28c           # build (Touch-LCD-2.8C; first build is slow)
 pio run -e esp32-s3-lcd-28c                 # build (LCD-2.8C non-touch)
+pio run -e esp32-p4-lcd-34c                 # build (ESP32-P4 3.4C)
 pio run -e esp32-s3-amoled-175 -t upload    # flash over USB-C
 pio device monitor -b 115200                # serial
 ```

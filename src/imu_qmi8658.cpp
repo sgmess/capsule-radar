@@ -36,7 +36,7 @@ static bool rd(uint8_t reg, uint8_t *buf, uint8_t len) {
 }
 
 bool imu_begin() {
-    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 400000);   // idempotent (touch also begins it)
+    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_CLOCK_HZ);   // idempotent (touch also begins it)
     const uint8_t addrs[2] = { 0x6B, 0x6A };
     for (uint8_t i = 0; i < 2; ++i) {
         s_addr = addrs[i];
